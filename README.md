@@ -1,4 +1,4 @@
-# AGD-LDM: Identifying Abnormally Expressed Genes Using Latent Diffusion Models
+# AGD-LDM: Identifying Anormally Expressed Genes Using Latent Diffusion Models
 
 # packages to use
 ```
