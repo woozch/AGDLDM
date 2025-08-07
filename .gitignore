@@ -1,0 +1,80 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environment
+.env
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# PyTorch files
+*.pt
+*.pth
+*.ckpt
+
+# TensorBoard logs
+runs/
+events.out.tfevents.*
+
+# Hugging Face cache and models
+# Transformers: tokenizer, model, config files
+*.bin
+*.json
+*.model
+*.h5
+
+# Hugging Face dataset and model caches
+~/.cache/huggingface/
+~/.huggingface/
+~/.local/share/huggingface/
+.cache/
+huggingface/
+
+# Datasets (if using load_dataset with download)
+/data/
+!*/data/
+
+# model weights
+/models/
+!*/models/
+
+# Weights and Biases
+wandb/
+
+# Output directories
+output/
+checkpoints/
+logs/
+results/
+experiments/
+
+# Docker-related
+*.log
+*.pid
+*.gz
+*.tar
+*.tar.gz
+*.whl
+
+# VSCode
+.vscode/
+.devcontainer/
+
+# PyCharm
+.idea/
+
+# MacOS
+.DS_Store
+
+# Build
+build/
+dist/
+*.egg-info/
