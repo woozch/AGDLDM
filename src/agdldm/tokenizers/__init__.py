@@ -1,0 +1,1 @@
+from .gene_tokenizer import get_gene_tokenizer, get_gene_tokenizer_fast
