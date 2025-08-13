@@ -7,7 +7,7 @@ import pyarrow
 from typing import List
 
 from datasets import Dataset, DatasetDict
-from agdldm.utils.parquet import find_parquet_files
+from ..utils.parquet import find_parquet_files
 
 
 def gene_exp_generator(
@@ -70,15 +70,12 @@ def load_gene_exp_dataset(
     parquet_file_paths = find_parquet_files(data_files)
     gen_kwargs = {
         "parquet_file_paths": parquet_file_paths,
+        "gene_list_file": gene_list_file,
+        "with_genes_string": with_genes_string,
+        "with_gene_exp_mask": with_gene_exp_mask,
     }
-    generator_fn = functools.partial(
-        gene_exp_generator,
-        gene_list_file=gene_list_file,
-        with_genes_string=with_genes_string,
-        with_gene_exp_mask=with_gene_exp_mask,
-    )
     dataset = Dataset.from_generator(
-        generator_fn,
+        gene_exp_generator,
         cache_dir=cache_dir,
         gen_kwargs=gen_kwargs,
         num_proc=num_proc,
