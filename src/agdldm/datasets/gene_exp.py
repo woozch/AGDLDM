@@ -61,7 +61,7 @@ def load_gene_exp_dataset(
     gene_list_file: str | None = None,
     split_ratio: float | None = 0.1,
     split_seed: int = 42,
-    num_proc: int = os.cpu_count(),
+    num_proc: int = 1,
     keep_in_memory: bool = False,
     cache_dir: str | None = None,
     with_genes_string: bool = False,
@@ -71,13 +71,14 @@ def load_gene_exp_dataset(
     gen_kwargs = {
         "parquet_file_paths": parquet_file_paths,
     }
+    generator_fn = functools.partial(
+        gene_exp_generator,
+        gene_list_file=gene_list_file,
+        with_genes_string=with_genes_string,
+        with_gene_exp_mask=with_gene_exp_mask,
+    )
     dataset = Dataset.from_generator(
-        functools.partial(
-            gene_exp_generator,
-            gene_list_file=gene_list_file,
-            with_genes_string=with_genes_string,
-            with_gene_exp_mask=with_gene_exp_mask,
-        ),
+        generator_fn,
         cache_dir=cache_dir,
         gen_kwargs=gen_kwargs,
         num_proc=num_proc,
