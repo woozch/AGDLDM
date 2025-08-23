@@ -1,5 +1,5 @@
 # Base image
-FROM pytorch/pytorch:2.7.1-cuda12.6-cudnn9-devel
+FROM pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel
 
 # Environment settings
 ENV TZ=Asia/Seoul

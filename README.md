@@ -2,5 +2,14 @@
 
 # packages to use
 ```
-numpy scipy scikit-learn transformers[torch] diffusers[torch] evaluate tokenizers datasets accelerate tensorboard rich markdown matplotlib dask[complete] python-dotenv pyyaml jupyter peft torch-tb-profiler seaborn tqdm faiss-cpu
+# may installed in conda env of docker hub torch image
+numpy pyyaml tqdm
+# need to install
+scipy scikit-learn pyarrow pandas tensorboard rich markdown matplotlib python-dotenv jupyter seaborn faiss-cpu \
+
+# huggingface related packages
+transformers[torch] diffusers[torch] evaluate tokenizers datasets accelerate peft 
+
+# may need to install in future
+dask[complete] torch-tb-profiler
 ```
