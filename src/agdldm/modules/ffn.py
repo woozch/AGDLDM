@@ -7,15 +7,13 @@ from transformers.activations import ACT2FN
 
 
 class FFNBlock(nn.Module):
-    """FFN block with various encoder layer types and normalization options."""
-
     def __init__(
         self,
         in_features: int,
         intermediate_features: int,
         out_features: Optional[int] = None,
         dropout_rate: float = 0.1,
-        layer_type: Literal["glu", "linear"] = "glu",
+        layer_type: Literal["glu", "mlp"] = "glu",
         activation_type: Literal["swish", "relu", "gelu", "sigmoid"] = "swish",
         norm_type: Literal["pre", "post", "none"] = "post",
         use_residual: bool = True,
@@ -37,16 +35,16 @@ class FFNBlock(nn.Module):
             self.norm = nn.Identity()
 
         # Create FeedForward Network layer
-        if layer_type == "glu":
-            self.ffn = GLU(
+        if layer_type == "glu":  # gated linear unit
+            self.block = GLU(
                 in_features,
                 intermediate_features,
                 out_features,
                 activation_type=activation_type,
                 bias=bias,
             )
-        elif layer_type == "linear":
-            self.ffn = nn.Sequential(
+        elif layer_type == "mlp":  # multi-layer perceptron
+            self.block = nn.Sequential(
                 nn.Linear(in_features, intermediate_features, bias=bias),
                 ACT2FN[activation_type],
                 nn.Dropout(dropout_rate),
@@ -71,33 +69,33 @@ class FFNBlock(nn.Module):
             if self.norm_type == "pre":
                 # Pre-norm: norm -> encoder -> dropout -> residual
                 x = self.norm(x)
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
                 x = x + residual
             elif self.norm_type == "post":
                 # Post-norm: encoder -> dropout -> residual -> norm
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
                 x = self.norm(x + residual)
             else:  # norm_type == "none"
                 # No norm: encoder -> dropout -> residual
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
                 x = x + residual
         else:
             if self.norm_type == "pre":
                 # Pre-norm: norm -> encoder -> dropout -> residual
                 x = self.norm(x)
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
             elif self.norm_type == "post":
                 # Post-norm: encoder -> dropout -> residual -> norm
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
                 x = self.norm(x)
             else:  # norm_type == "none"
                 # No norm: encoder -> dropout -> residual
-                x = self.ffn(x)
+                x = self.block(x)
                 x = self.dropout(x)
 
         return x
