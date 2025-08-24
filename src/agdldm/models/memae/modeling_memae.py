@@ -22,6 +22,7 @@ class MemAEOutput(ModelOutput):
     att_l1_loss: Optional[torch.FloatTensor] = None
     z: Optional[torch.FloatTensor] = None
     att: Optional[torch.FloatTensor] = None
+    x: Optional[torch.FloatTensor] = None
     x_recon: Optional[torch.FloatTensor] = None
     parts: Optional[List[torch.FloatTensor]] = None
     parts_rec: Optional[List[torch.FloatTensor]] = None
@@ -206,6 +207,7 @@ class MemAEModel(PreTrainedModel):
             att_l1_loss=att_l1,
             z=z,
             att=att,
+            x=X,
             x_recon=X_rec,
             parts=parts,
             parts_rec=parts_rec,
