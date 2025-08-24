@@ -25,7 +25,7 @@ class MemAEOutput(ModelOutput):
     x: Optional[torch.FloatTensor] = None
     x_recon: Optional[torch.FloatTensor] = None
     parts: Optional[List[torch.FloatTensor]] = None
-    parts_rec: Optional[List[torch.FloatTensor]] = None
+    parts_recon: Optional[List[torch.FloatTensor]] = None
 
 
 class MemAEModel(PreTrainedModel):
@@ -172,8 +172,8 @@ class MemAEModel(PreTrainedModel):
         parts = self.projector(X)  # list of (B, m_i)
         p = self._encode_sets(parts)  # (B, latent_dim, P)
         z, att = self._memory(p)  # (B, latent_dim, P), (B, M, P)
-        parts_rec = self._decode_sets(z)  # list of (B, m_i)
-        X_rec = self.projector.inverse(parts_rec)  # (B, F)
+        parts_recon = self._decode_sets(z)  # list of (B, m_i)
+        X_rec = self.projector.inverse(parts_recon)  # (B, F)
 
         loss = torch.tensor(0.0, device=X.device, dtype=X.dtype)
 
@@ -182,7 +182,7 @@ class MemAEModel(PreTrainedModel):
             loss += self.config.mse_weight * mse
         if self.config.mse_per_set_weight > 0:
             mse_per_set = [
-                F.mse_loss(parts_rec[i], parts[i], reduction="mean")
+                F.mse_loss(parts_recon[i], parts[i], reduction="mean")
                 for i in range(self.num_sets)
             ]
             loss += self.config.mse_per_set_weight * torch.stack(mse_per_set).mean()
@@ -198,7 +198,7 @@ class MemAEModel(PreTrainedModel):
             att_l1 = torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
 
         if not return_dict:
-            return loss, X_rec, z, att, att_entropy, att_l1, parts, parts_rec
+            return loss, X_rec, z, att, att_entropy, att_l1, parts, parts_recon
 
         return MemAEOutput(
             loss=loss,
@@ -210,7 +210,7 @@ class MemAEModel(PreTrainedModel):
             x=X,
             x_recon=X_rec,
             parts=parts,
-            parts_rec=parts_rec,
+            parts_recon=parts_recon,
         )
 
     # Convenience methods
@@ -304,4 +304,4 @@ if __name__ == "__main__":
         print("att:", tuple(output.att.shape))
         print("x_recon:", tuple(output.x_recon.shape))
         print("parts:", [tuple(p.shape) for p in output.parts])
-        print("parts_rec:", [tuple(p.shape) for p in output.parts_rec])
+        print("parts_recon:", [tuple(p.shape) for p in output.parts_rec])
