@@ -176,16 +176,20 @@ class MemAEModel(PreTrainedModel):
         X_rec = self.projector.inverse(parts_recon)  # (B, F)
 
         loss = torch.tensor(0.0, device=X.device, dtype=X.dtype)
-
+        recon_loss = torch.tensor(0.0, device=X.device, dtype=X.dtype)
         if self.config.mse_weight > 0:
-            mse = F.mse_loss(X_rec, X, reduction="mean")
-            loss += self.config.mse_weight * mse
+            recon_loss += self.config.mse_weight * F.mse_loss(
+                X_rec, X, reduction="mean"
+            )
         if self.config.mse_per_set_weight > 0:
             mse_per_set = [
                 F.mse_loss(parts_recon[i], parts[i], reduction="mean")
                 for i in range(self.num_sets)
             ]
-            loss += self.config.mse_per_set_weight * torch.stack(mse_per_set).mean()
+            recon_loss += (
+                self.config.mse_per_set_weight * torch.stack(mse_per_set).mean()
+            )
+        loss += recon_loss
         if self.config.att_entropy_weight > 0:
             att_entropy = self._attention_entropy(att)
             loss += self.config.att_entropy_weight * att_entropy
@@ -202,7 +206,7 @@ class MemAEModel(PreTrainedModel):
 
         return MemAEOutput(
             loss=loss,
-            recon_loss=mse,
+            recon_loss=recon_loss,
             att_entropy_loss=att_entropy,
             att_l1_loss=att_l1,
             z=z,
