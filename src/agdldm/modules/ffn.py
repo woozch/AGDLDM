@@ -144,8 +144,7 @@ class FeedForwardNet(nn.Module):
             prev_dim = hidden_dim
 
         # Add output layer if needed
-        if output_dim != hidden_dims[-1]:
-            layers.append(nn.Linear(hidden_dims[-1], output_dim, bias=bias))
+        layers.append(nn.Linear(hidden_dims[-1], output_dim, bias=bias))
 
         self.layers = nn.Sequential(*layers)
 
