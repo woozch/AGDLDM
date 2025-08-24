@@ -6,35 +6,66 @@ from torch import nn, Tensor
 
 class FeatureSetProjector(nn.Module):
     """
-    Project feature matrix into overlapping feature set slices and reconstruct back.
+    Projects feature matrices into overlapping feature set slices and reconstructs them.
 
-    This module takes an input feature matrix of shape (N, F) and projects it into p
-    overlapping feature set slices [(N, m_i)], where m_i is the size of each feature set.
-    It can also reconstruct the original feature space from the slices.
+    This module handles the projection of input feature matrices into multiple overlapping
+    feature subsets and provides reconstruction capabilities. It's useful for scenarios
+    where features need to be processed in different overlapping groups while maintaining
+    the ability to reconstruct the original feature space.
 
     Parameters
     ----------
     num_features : int
-        Total number of features (F) in the input matrix.
-    feature_set_indices : Sequence[Sequence[int]] 
-        List of p feature sets. Each set contains zero-based column indices (0..F-1)
-        that define which features belong to that set. Features can appear in multiple sets.
-    merge : {"mean", "first", None}, default "mean"
+        Total number of features (F) in the input feature matrix.
+    feature_set_indices : Sequence[Sequence[int]]
+        List of feature sets, where each set contains zero-based column indices (0..F-1)
+        defining which features belong to that set. Features can appear in multiple sets
+        (overlapping is allowed).
+    merge : {"mean", "first", None}, optional, default="mean"
         Strategy for merging overlapping features during reconstruction:
+
         - "mean": Average values from all sets containing the feature
-        - "first": Use value from first set containing the feature
-        - None: No merging, return raw projections
+        - "first": Use value from the first set containing the feature
+        - None: No merging, return raw projections (useful for debugging)
+
+    Attributes
+    ----------
+    num_features : int
+        Total number of features in the input matrix.
+    num_presets : int
+        Number of feature sets (presets).
+    p_size : List[int]
+        List containing the size of each feature set.
+    feature_multiplicity : Tensor
+        Count of how many times each feature appears across all sets.
 
     Methods
     -------
-    forward(x : Tensor) -> List[Tensor]
-        Projects input tensor into feature set slices
-    inverse(parts : List[Tensor]) -> Tensor  
-        Reconstructs original feature space from slices
-    concat(parts : List[Tensor]) -> Tensor
-        Concatenates feature set slices along feature dimension
-    split(z : Tensor) -> List[Tensor]
-        Splits concatenated tensor back into feature set slices
+    forward(x)
+        Projects input tensor into feature set slices.
+    inverse(parts)
+        Reconstructs original feature space from slices using merge strategy.
+    concat(parts)
+        Concatenates feature set slices along feature dimension.
+    split(z)
+        Splits concatenated tensor back into feature set slices.
+
+    Examples
+    --------
+    >>> batch_size, num_features = 100, 10
+    >>> X = torch.randn(batch_size, num_features)
+    >>>
+    >>> # Define overlapping feature sets
+    >>> feature_sets = [[1, 3, 5, 7, 9], [2, 4, 6, 8], [0, 2, 8]]
+    >>>
+    >>> # Create projector
+    >>> projector = FeatureSetProjector(num_features, feature_sets, merge="mean")
+    >>>
+    >>> # Project into slices
+    >>> parts = projector(X)  # List of tensors with shapes (batch_size, set_size)
+    >>>
+    >>> # Reconstruct original space
+    >>> X_reconstructed = projector.inverse(parts)  # Shape: (batch_size, num_features)
     """
 
     def __init__(
@@ -107,47 +138,55 @@ class FeatureSetProjector(nn.Module):
     def forward(self, X: Tensor) -> List[Tensor]:
         """
         Project X -> parts
-        X: (N, F) tensor
-        returns: list of length p with shapes (N, m_i)
+        X: (batch_size, num_features) tensor
+        returns: list of length num_presets with shapes (batch_size, p_size[i])
         """
         if X.dim() != 2 or X.size(1) != self.num_features:
-            raise ValueError(f"X must be (N, {self.num_features})")
+            raise ValueError(
+                f"X must be ({X.size(0)}, {self.num_features}) but got {X.shape}"
+            )
         parts: List[Tensor] = []
         for i in range(self.num_presets):
             idx: Tensor = getattr(self, f"idx_{i}")
             parts.append(X.index_select(dim=1, index=idx))
         return parts
 
-    def inverse(self, parts: Sequence[Tensor], N: Optional[int] = None) -> Tensor:
+    def inverse(self, parts: Sequence[Tensor]) -> Tensor:
         """
-        Reconstruct (N, F) from list of parts using merge strategy.
+        Reconstruct (batch_size, num_features) from list of parts using merge strategy.
         If weighted, uses weighted mean of overlaps.
         """
         if len(parts) != self.num_presets:
             raise ValueError(f"Expected {self.num_presets} parts, got {len(parts)}")
-        if N is None:
-            N = int(parts[0].size(0))
+        batch_size = int(parts[0].size(0))
 
         device = parts[0].device
         dtype = parts[0].dtype
 
         for i, P in enumerate(parts):
-            if P.dim() != 2 or P.size(0) != N:
-                raise ValueError(f"part {i} must be (N, m_i) with N={N}")
+            if P.dim() != 2 or P.size(0) != batch_size:
+                raise ValueError(
+                    f"part {i} must be ({batch_size}, {self.p_size[i]}) but got {P.shape}"
+                )
             if P.device != device or P.dtype != dtype:
                 raise ValueError("all parts must share the same device/dtype")
 
-
-        X_recon = torch.zeros((N, self.num_features), device=device, dtype=dtype)
+        X_recon = torch.zeros(
+            (batch_size, self.num_features), device=device, dtype=dtype
+        )
 
         if self.merge in (None, "mean"):
-            cat_idx = torch.cat([getattr(self, f"idx_{i}") for i in range(self.num_presets)], dim=0)
+            cat_idx = torch.cat(
+                [getattr(self, f"idx_{i}") for i in range(self.num_presets)], dim=0
+            )
             cat_parts = torch.cat(parts, dim=1)
 
             X_recon.index_add_(1, cat_idx, cat_parts)
 
             if self.merge == "mean":
-                denom = self.feature_multiplicity.to(dtype=dtype).clamp_min(1).unsqueeze(0)
+                denom = (
+                    self.feature_multiplicity.to(dtype=dtype).clamp_min(1).unsqueeze(0)
+                )
                 if torch.is_floating_point(X_recon):
                     eps = torch.finfo(dtype).eps
                     denom = denom.clamp_min(eps)
@@ -159,9 +198,9 @@ class FeatureSetProjector(nn.Module):
             filled = torch.zeros((self.num_features,), device=device, dtype=torch.bool)
 
             for i in range(self.num_presets):
-                idx: Tensor = getattr(self, f"idx_{i}")                  # (m_i,)
-                P:   Tensor = parts[i]                                   # (N, m_i)
-                mask = ~filled[idx]                                      # (m_i,)
+                idx: Tensor = getattr(self, f"idx_{i}")  # (m_i,)
+                P: Tensor = parts[i]  # (batch_size, m_i)
+                mask = ~filled[idx]  # (m_i,)
                 if mask.any():
                     cols = idx[mask]
                     X_recon[:, cols] = P[:, mask]
@@ -170,12 +209,15 @@ class FeatureSetProjector(nn.Module):
         else:
             raise ValueError(f"Unknown merge strategy: {self.merge}")
 
+    def extra_repr(self) -> str:
+        return f"num_features={self.num_features}, num_presets={self.num_presets}, merge={self.merge}"
+
 
 if __name__ == "__main__":
     import torch
 
-    N, F = 100, 10
-    X = torch.randn(N, F)
+    batch_size, F_dim = 100, 10
+    X = torch.randn(batch_size, F_dim)
 
     # Example overlapping feature sets
     fs1 = [1, 3, 5, 7, 9]
@@ -183,12 +225,13 @@ if __name__ == "__main__":
     fs3 = [0, 2, 8]
     feature_sets = [fs1, fs2, fs3]
 
-    proj = FeatureSetProjector(F, feature_sets, merge="mean")  # or "first"
-    parts = proj(X)  # forward -> list [(N, m_i)]
+    proj = FeatureSetProjector(F_dim, feature_sets, merge="mean")  # or "first"
+    parts = proj(X)  # forward -> list [(batch_size, m_i)]
     # check parts are correct
     for i, P in enumerate(parts):
         assert torch.allclose(X[:, feature_sets[i]], P)
 
-    X_rec_mean = proj.inverse(parts)  # (N, F)
+    X_rec_mean = proj.inverse(parts)  # (batch_size, F)
 
     assert torch.allclose(X, X_rec_mean)
+    print("Test passed")
