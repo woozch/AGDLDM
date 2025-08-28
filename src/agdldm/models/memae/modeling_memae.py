@@ -139,10 +139,13 @@ class MemAEModel(PreTrainedModel):
             )  # output: (B, latent_dim, num_sets), att: (B, mem_dim, num_sets)
             return out["output"], out["att"]
         else:
-            out = [
-                mem(z[:, :, i]) for mem, i in zip(self.memory, range(self.num_sets))
-            ]  # output: (B, latent_dim, num_sets), att: (B, mem_dim, num_sets)
-            return out["output"], out["att"]
+            out = [mem(z[:, :, i]) for mem, i in zip(self.memory, range(self.num_sets))]
+            outputs, atts = list(
+                zip(*[(out_i["output"], out_i["att"]) for out_i in out])
+            )
+            return torch.stack(outputs, dim=2), torch.stack(
+                atts, dim=2
+            )  # output: (B, latent_dim, num_sets), att: (B, mem_dim, num_sets)
 
     def _decode_sets(self, z: Tensor) -> List[Tensor]:
         """Decode (B, latent_dim, num_sets) -> list of (B, m_i)."""
@@ -173,13 +176,13 @@ class MemAEModel(PreTrainedModel):
         p = self._encode_sets(parts)  # (B, latent_dim, P)
         z, att = self._memory(p)  # (B, latent_dim, P), (B, M, P)
         parts_recon = self._decode_sets(z)  # list of (B, m_i)
-        X_rec = self.projector.inverse(parts_recon)  # (B, F)
+        X_recon = self.projector.inverse(parts_recon)  # (B, F)
 
         loss = torch.tensor(0.0, device=X.device, dtype=X.dtype)
         recon_loss = torch.tensor(0.0, device=X.device, dtype=X.dtype)
         if self.config.mse_weight > 0:
             recon_loss += self.config.mse_weight * F.mse_loss(
-                X_rec, X, reduction="mean"
+                X_recon, X, reduction="mean"
             )
         if self.config.mse_per_set_weight > 0:
             mse_per_set = [
@@ -202,7 +205,7 @@ class MemAEModel(PreTrainedModel):
             att_l1 = torch.tensor(0.0, device=loss.device, dtype=loss.dtype)
 
         if not return_dict:
-            return loss, X_rec, z, att, att_entropy, att_l1, parts, parts_recon
+            return loss, X_recon, z, att, att_entropy, att_l1, parts, parts_recon
 
         return MemAEOutput(
             loss=loss,
@@ -212,22 +215,10 @@ class MemAEModel(PreTrainedModel):
             z=z,
             att=att,
             x=X,
-            x_recon=X_rec,
+            x_recon=X_recon,
             parts=parts,
             parts_recon=parts_recon,
         )
-
-    # Convenience methods
-    @torch.no_grad()
-    def reconstruction_error(self, input_values: Tensor, metric: str = "mse") -> Tensor:
-        out = self.forward(input_values, return_dict=True)
-        if metric == "mse":
-            err = ((out.recon - input_values) ** 2).mean(dim=1)  # per-sample MSE
-        elif metric == "mae":
-            err = (out.recon - input_values).abs().mean(dim=1)
-        else:
-            raise ValueError("metric must be one of {'mse','mae'}")
-        return err
 
 
 # -----------------------------
@@ -261,12 +252,10 @@ if __name__ == "__main__":
             json.dump(feature_list, f)
         with open(feature_presets_file, "w") as f:
             json.dump(feature_presets, f)
-        import pdb
-
-        pdb.set_trace()
         cfg = MemAEConfig(
             input_dim=input_dim,
             latent_dim=16,
+            projector_merge="mean",
             feature_list_file=feature_list_file,
             feature_presets_file=feature_presets_file,
             # encoder
@@ -308,4 +297,4 @@ if __name__ == "__main__":
         print("att:", tuple(output.att.shape))
         print("x_recon:", tuple(output.x_recon.shape))
         print("parts:", [tuple(p.shape) for p in output.parts])
-        print("parts_recon:", [tuple(p.shape) for p in output.parts_rec])
+        print("parts_recon:", [tuple(p.shape) for p in output.parts_recon])
